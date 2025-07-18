@@ -40,7 +40,7 @@ has_action(sol::NullSolution, t::Int, state::State) =
 has_action(sol::NullPolicy, t::Int, state::State) =
     false
 has_action(sol::PolicySolution, t::Int, state::State) =
-    !ismissing(SymbolicPlanners.get_action(sol, state))
+    true
 has_action(sol::OrderedSolution, t::Int, state::State) =
     ((0 < t <= length(sol) && sol[t] == state) ||
      !isnothing(findfirst(==(state), sol)))
@@ -48,8 +48,6 @@ has_action(sol::PathSearchSolution, t::Int, state::State) =
     !ismissing(SymbolicPlanners.get_action(sol, state))
 has_action(sol::MultiSolution, t::Int, state::State) =
     has_action(sol.selector(sol.solutions, state), t, state)
-has_action(sol::MixturePolicy, t::Int, state::State) =
-    all(has_action(p, t, state) for p in sol.policies)
 
 "Returns whether there are cached action value for step `t` at a `belief_state`."
 has_cached_action(plan_state::PlanState, t::Int, belief_state) =
@@ -750,14 +748,14 @@ end
 
 "Refine an initial solution for multiple search budgets."
 function _multi_budget_refine(
-    planner::Planner, init_sol::Solution, budgets,
+    init_sol::S, planner::Planner, budgets,
     domain::Domain, state::State, spec::Specification;
     budget_var = default_budget_var(planner),
     budget_refinable::Bool = false
-)
+) where {S <: Solution}
     @assert issorted(budgets)
     planner = copy(planner)
-    subsols = Vector{eltype(init_sol)}()
+    subsols = Vector{S}()
     for i in 1:length(budgets)
         if budget_refinable
             budget_diff = budgets[i] - get(budgets, i-1, 0)
