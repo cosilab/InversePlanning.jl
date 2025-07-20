@@ -15,7 +15,7 @@ Represents the state of an agent at a point in time.
 
 $(FIELDS)
 """
-struct AgentState{B,G,P}
+struct AgentState{B,G,P} <: ModelState
     "Agent's belief state."
     belief_state::B
     "Agent's goal state."
@@ -25,22 +25,30 @@ struct AgentState{B,G,P}
 end
 
 """
-    AgentConfig
+    AgentConfig(;
+        belief_config = DirectBeliefConfig(),
+        goal_config = StaticGoalConfig(MinStepsGoal([])),
+        plan_config = StaticPlanConfig(),
+        act_config = DetermActConfig()
+    )
 
-Configuration of an agent model, including goal priors, planning steps, etc.
+Configuration of an agent model, including belief updates, goal priors,
+planning updates, and action policies. See [`BeliefConfig`](@ref),
+[`GoalConfig`](@ref), [`PlanConfig`](@ref), and [`ActConfig`](@ref) for
+for how to configure each sub-model.
 
 # Fields
 
 $(FIELDS)    
 """
-@kwdef struct AgentConfig{B,G,P,A}
-    "Belief model configuration."
+@kwdef struct AgentConfig{B,G,P,A} <: ModelConfig
+    "Belief configuration (see [`BeliefConfig`](@ref))."
     belief_config::B = DirectBeliefConfig()
-    "Goal model configuration"
+    "Goal configuration (see [`GoalConfig`](@ref))."
     goal_config::G = StaticGoalConfig(MinStepsGoal([]))
-    "Planning model configuration."
+    "Planning configuration (see [`PlanConfig`](@ref))."
     plan_config::P = StaticPlanConfig()
-    "Action model configuration."
+    "Action configuration (see [`ActConfig`](@ref))."
     act_config::A = DetermActConfig()
 end
 

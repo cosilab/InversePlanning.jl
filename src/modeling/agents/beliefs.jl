@@ -5,13 +5,17 @@ export BeliefConfig, DirectBeliefConfig
 """
     BeliefConfig
 
-Configuration of an agent's belief model.
+Configuration of an agent's belief model, which specifies their initial belief
+state and how the agent updates their beliefs in response to each new
+environment state.
 
 # Fields
 
 $(FIELDS)
+
+# Constructors
 """
-struct BeliefConfig{T,U,V}
+struct BeliefConfig{T,U,V} <: ModelConfig
     "Initializer with arguments `(env_state, init_args...)`."
     init::T
     "Trailing arguments to initializer."
@@ -33,6 +37,11 @@ to the full environment state (and all past information or beliefs are ignored).
 function DirectBeliefConfig()
     return BeliefConfig(direct_belief_init, (), direct_belief_step, ())
 end
+
+@add_constructor_doc(
+    BeliefConfig, DirectBeliefConfig,
+    "Models an agent with direct knowledge of the full environment state."
+)
 
 """
     direct_belief_init(env_state)

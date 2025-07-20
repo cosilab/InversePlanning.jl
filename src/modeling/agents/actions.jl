@@ -17,7 +17,7 @@ export policy_dist
 Generic action state, which combines either an `action` term or a nested
 `act_state` with optional `metadata`.
 """
-struct ActState{T, U}
+struct ActState{T, U} <: ModelState
     act_state::T
     metadata::U
 end
@@ -32,13 +32,16 @@ Base.convert(::Type{Term}, act_state::ActState) =
 """
     ActConfig
 
-Configuration of an agent's action model.
+Configuration of an agent's action model, which specifies how the agent selects
+actions given the plan or policy they have computed.
 
 # Fields
 
 $(FIELDS)
+
+# Constructors
 """
-struct ActConfig{T,U,V}
+struct ActConfig{T,U,V} <: ModelConfig
     "Initializer with arguments `(agent_state, env_state, init_args...)`."
     init::T
     "Trailing arguments to initializer."
@@ -54,12 +57,17 @@ end
 """
     DetermActConfig()
 
-Constructs an `ActConfig` which deterministically selects the planned best
-action for the current state, give the current plan or policy.
+Constructs an [`ActConfig`](@ref) which deterministically selects the planned
+best action for the current state, give the current plan or policy.
 """
 function DetermActConfig()
     return ActConfig(PDDL.no_op, (), determ_act_step, ())
 end
+
+@add_constructor_doc(
+    ActConfig, DetermActConfig,
+    "Models deterministic selection of the best planned action."
+)
 
 """
     determ_act_step(t, act_state, agent_state, env_state)
@@ -80,7 +88,7 @@ end
     EpsilonGreedyActConfig(domain::Domain, epsilon::Real,
                            default=RandomPolicy(domain))
 
-Constructs an `ActConfig` which selects a random action `epsilon` of the time
+Constructs an [`ActConfig`](@ref) which selects a random action `epsilon` of the time
 and otherwise selects the best/planned action.
 
 If a `default` policy is provided, then actions will be selected from this
@@ -89,8 +97,13 @@ policy when the goal is unreachable or has been achieved.
 function EpsilonGreedyActConfig(domain::Domain, epsilon::Real,
                                 default = RandomPolicy(domain))
     return ActConfig(PDDL.no_op, (), eps_greedy_act_step,
-                     (domain, epsilon, default))
+                     (; domain, epsilon, default))
 end
+
+@add_constructor_doc(
+    ActConfig, EpsilonGreedyActConfig,
+    "Models greedy action selection with an epsilon chance of a random action."
+)
 
 """
     eps_greedy_act_step(t, act_state, agent_state, env_state,
@@ -143,8 +156,13 @@ function HierarchicalEpsilonActConfig(
     prior_weights = convert(Vector{Float64}, prior_weights)
     init_act_state = ActState{Term}(PDDL.no_op, prior_weights)
     return ActConfig(init_act_state, (), h_epsilon_act_step,
-                     (domain, epsilons, default))
+                     (; domain, epsilons, default))
 end
+
+@add_constructor_doc(
+    ActConfig, HierarchicalEpsilonActConfig,
+    "Epsilon-greedy action selection with a prior over epsilon."
+)
 
 """
     h_epsilon_act_step(t, act_state, agent_state, env_state,
@@ -194,15 +212,20 @@ end
 """
     BoltzmannActConfig(temperature::Real, [epsilon=0.0])
 
-Constructs an `ActConfig` which samples actions according to the Boltzmann
-distribution over action Q-values with a specified `temperature`. To prevent 
-zero-probability actions, an `epsilon` value can be specified, creating a
-mixture between Boltzmann and epsilon-greedy policies.
+Constructs an [`ActConfig`](@ref) that samples actions according to the
+Boltzmann distribution over action Q-values with a specified `temperature`.
+To prevent  zero-probability actions, an `epsilon` value can be specified,
+creating a mixture between Boltzmann and epsilon-greedy policies.
 """
 function BoltzmannActConfig(temperature::Real, epsilon::Real=0.0)
     return ActConfig(PDDL.no_op, (), boltzmann_act_step,
-                     (temperature, epsilon))
+                     (; temperature, epsilon))
 end
+
+@add_constructor_doc(
+    ActConfig, BoltzmannActConfig,
+    "Models Boltzmann-rational action selection."
+)
 
 """
     boltzmann_act_step(t, act_state, agent_state, env_state,
@@ -224,7 +247,7 @@ end
 """
     BoltzmannMixtureActConfig(temperatures, [weights, epsilon=0.0])
 
-Constructs an `ActConfig` which samples actions according to a mixture of
+Constructs an [`ActConfig`](@ref) that samples actions according to a mixture of
 Boltzmann distributions over action Q-values, given a vector of `temperatures`
 and optional `weights` which sum to 1.0. If `weights` is not specified, then
 all weights are equal.
@@ -241,8 +264,13 @@ function BoltzmannMixtureActConfig(
     temperatures = convert(Vector{Float64}, temperatures)
     weights = convert(Vector{Float64}, weights)
     return ActConfig(PDDL.no_op, (), boltzmann_mixture_act_step,
-                     (temperatures, weights, epsilon))
+                     (; temperatures, weights, epsilon))
 end
+
+@add_constructor_doc(
+    ActConfig, BoltzmannMixtureActConfig,
+    "Models Boltzmann-rational actions with a mixture of different temperatures."
+)
 
 """
     boltzmann_mixture_act_step(t, act_state, agent_state, env_state,
@@ -270,9 +298,9 @@ end
     HierarchicalBoltzmannActConfig(temperatures, prior::Gen.Distribution,
                                    prior_args::Tuple, [epsilon])
 
-Constructs an `ActConfig` which samples actions according to a hierarchical
-Boltzmann policy, given a categorical prior over the temperature of the policy.
-The prior can be specified by a list of `temperatures`, and optional
+Constructs an [`ActConfig`](@ref) which samples actions according to a
+hierarchical Boltzmann policy, given a categorical prior over the temperature of
+the policy. The prior can be specified by a list of `temperatures`, and optional
 `prior_weights` which sum to 1.0.
 
 Alternatively, a continuous univariate `prior` and `prior_args` can be provided,
@@ -297,7 +325,7 @@ function HierarchicalBoltzmannActConfig(
     prior_weights = convert(Vector{Float64}, prior_weights)
     init_act_state = ActState{Term}(PDDL.no_op, prior_weights)
     return ActConfig(init_act_state, (), h_boltzmann_act_step,
-                     (temperatures, epsilon))
+                     (; temperatures, epsilon))
 end
 
 function HierarchicalBoltzmannActConfig(
@@ -310,8 +338,13 @@ function HierarchicalBoltzmannActConfig(
     end |> softmax
     init_act_state = ActState{Term}(PDDL.no_op, prior_weights)
     return ActConfig(init_act_state, (), h_boltzmann_act_step,
-                     (temperatures, epsilon))
+                     (; temperatures, epsilon))
 end
+
+@add_constructor_doc(
+    ActConfig, HierarchicalBoltzmannActConfig,
+    "Boltzmann-rational action selection with a prior over the temperature."
+)
 
 """
     h_boltzmann_act_step(t, act_state, agent_state, env_state, temperatures)
@@ -353,9 +386,10 @@ end
 """
     ReplanMixtureActConfig(subpolicy_type, subpolicy_args, [subweights])
 
-Constructs an `ActConfig` which samples actions from a mixture of sub-solutions
-produced by `ReplanMixturePolicyConfig`. Each sub-solution is wrapped in a
-randomized sub-policy of `subpolicy_type` with arguments `subpolicy_args`.
+Constructs an [`ActConfig`](@ref) which samples actions from a mixture of
+sub-solutions produced by [`ReplanMixturePolicyConfig`](@ref). Each sub-solution
+is wrapped in a randomized sub-policy of `subpolicy_type` with arguments
+`subpolicy_args`.
 
 The probability of the sampled action under each sub-policy is passed to the
 next planning step, enabling the local posterior over sub-policies to be updated
@@ -364,6 +398,10 @@ at each step by `ReplanMixturePolicyConfig`.
 If `subweights` is specified, then the sub-policies are assumed to have 
 hierarchical priors over their parameters (e.g. temperature). These
 distributions are updated for each sub-policy after an action is chosen.
+
+For convenience constructors for specific sub-policy types, see
+[`BoltzmannReplanMixtureActConfig`](@ref), [`HBoltzmannReplanMixtureActConfig`](@ref),
+[`EpsilonReplanMixtureActConfig`](@ref) and [`HEpsilonReplanMixtureActConfig`].
 """
 function ReplanMixtureActConfig(
     subpolicy_type::Type{<:PolicySolution},
@@ -377,8 +415,13 @@ function ReplanMixtureActConfig(
     end
     init_act_state = ActState{Term}(PDDL.no_op, metadata)
     return ActConfig(init_act_state, (), replan_mixture_act_step,
-                     (subpolicy_type, subpolicy_args))
+                     (; subpolicy_type, subpolicy_args))
 end
+
+@add_constructor_doc(
+    ActConfig, HierarchicalBoltzmannActConfig,
+    "Action mixture model intended for use with [`ReplanMixturePolicyConfig`](@ref)."
+)
 
 """
     BoltzmannReplanMixtureActConfig(temperature, [epsilon])
@@ -387,7 +430,7 @@ Convenience constructor for [`ReplanMixtureActConfig`](@ref) with a
 Boltzmann policy.
 """
 function BoltzmannReplanMixtureActConfig(temperature::Real, epsilon::Real=0.0)
-    args = (temperature=temperature, epsilon=epsilon)
+    args = (; temperature, epsilon)
     return ReplanMixtureActConfig(BoltzmannPolicy, args)
 end
 
@@ -403,7 +446,7 @@ function HBoltzmannReplanMixtureActConfig(
         ones(length(temperatures)) ./ length(temperatures),
     epsilon::Real=0.0
 )
-    args = (temperatures=temperatures, epsilon=epsilon)
+    args = (; temperatures, epsilon)
     return ReplanMixtureActConfig(BoltzmannMixturePolicy, args, prior_weights)
 end
 
@@ -414,7 +457,7 @@ Convenience constructor for [`ReplanMixtureActConfig`](@ref) with an
 epsilon-greedy policy.
 """
 function EpsilonReplanMixtureActConfig(domain::Domain, epsilon::Real)
-    args = (domain=domain, epsilon=epsilon)
+    args = (; domain, epsilon)
     return ReplanMixtureActConfig(EpsilonGreedyPolicy, args)
 end
 
@@ -429,7 +472,7 @@ function HEpsilonReplanMixtureActConfig(
     prior_weights::AbstractVector{<:Real} =
         ones(length(epsilons)) ./ length(epsilons)
 )
-    args = (domain=domain, epsilon=epsilon)
+    args = (; domain, epsilon)
     return ReplanMixtureActConfig(EpsilonMixturePolicy, args, prior_weights)
 end
 
@@ -563,7 +606,7 @@ end
         utterance_args::Tuple = ()
     )
 
-Constructs an `ActConfig` which samples an action and utterance jointly,
+Constructs an [`ActConfig`](@ref) which samples an action and utterance jointly,
 combining a (non-communicative) `act_config` with an `utterance_model`. At each
 step, a `new_act` is sampled according to `act_config.step`:
 
@@ -590,11 +633,16 @@ function CommunicativeActConfig(
     act_step_args = act_config.step_args
     return ActConfig(
         communicative_act_init,
-        (act_init, act_init_args, utterance_model, utterance_args),
+        (; act_init, act_init_args, utterance_model, utterance_args),
         communicative_act_step,
-        (act_step, act_step_args, utterance_model, utterance_args)
+        (; act_step, act_step_args, utterance_model, utterance_args)
     )
 end
+
+@add_constructor_doc(
+    ActConfig, CommunicativeActConfig,
+    "Models joint action selection and utterance generation."
+)
 
 @gen function communicative_act_init(
     agent_state, env_state,

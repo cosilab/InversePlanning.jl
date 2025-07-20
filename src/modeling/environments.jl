@@ -3,13 +3,16 @@
 export EnvConfig, PDDLEnvConfig
 
 """
-    EnvConfig
+    EnvConfig <: ModelConfig
 
-Configuration of an environment model.
+Configuration of an environment model, specifying how the environment changes
+in response to the agent's actions.
 
 # Fields
 
 $(FIELDS)
+
+# Constructors
 """
 struct EnvConfig{T,U,V}
     "Initializer with arguments `(init_args...)`."
@@ -33,12 +36,17 @@ function StaticEnvConfig(init=nothing, init_args=())
     return EnvConfig(init, init_args, static_env_step, ())
 end
 
+@add_constructor_doc(
+    EnvConfig, StaticEnvConfig,
+    "Models a static environment that never changes."
+)
+
 """
-    static_env_step(t, env_state::State, action)
+    static_env_step(t, env_state, action)
 
 Static environment transition that returns previous state unmodified.
 """
-@gen static_env_step(t, env_state::State, action) = env_state
+@gen static_env_step(t, env_state, action) = env_state
 
 
 # PDDL environment model #
@@ -53,6 +61,11 @@ A `state_prior` can also be specified instead of a `state`.
 function PDDLEnvConfig(domain::Domain, init, init_args::Tuple=())
     return EnvConfig(init, init_args, pddl_env_step, (domain,))
 end
+
+@add_constructor_doc(
+    EnvConfig, PDDLEnvConfig,
+    "Models a PDDL environment with deterministic dynamics."
+)
 
 """
     pddl_env_step(t, env_state::State, act_state, domain::Domain)

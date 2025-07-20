@@ -13,7 +13,7 @@ Represents the state the world (agent + environment) at a point in time.
 
 $(FIELDS)
 """
-struct WorldState{A,X,E,O}
+struct WorldState{A,X,E,O} <: ModelState
     "Agent state."
     agent_state::A
     "Action state."
@@ -25,21 +25,26 @@ struct WorldState{A,X,E,O}
 end
 
 """
-    WorldConfig
+    WorldConfig(;
+        agent_config = AgentConfig(),
+        env_config = StaticEnvConfig(),
+        obs_config = PerfectObsConfig()
+    )
 
 Configuration of a world model, including agent, environment, and observation
-model configurations.
+model configurations. See `[AgentConfig](@ref)`, `[EnvConfig](@ref)`, and 
+`[ObsConfig](@ref)` for how to configure each sub-model.
 
 # Fields
 
-$(FIELDS)    
+$(FIELDS)
 """
-@kwdef struct WorldConfig{A,E,O}
-  "Agent model configuration."
+@kwdef struct WorldConfig{A,E,O} <: ModelConfig
+  "Agent model configuration (see `[AgentConfig](@ref)`)."
   agent_config::A = AgentConfig()
-  "Environment model configuration."
+  "Environment model configuration (see `[EnvConfig](@ref)`)."
   env_config::E = StaticEnvConfig()
-  "Observation model configuration."
+  "Observation model configuration (see `[ObsConfig](@ref)`)."
   obs_config::O = PerfectObsConfig()
 end
 

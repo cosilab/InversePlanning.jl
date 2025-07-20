@@ -7,13 +7,17 @@ export observe_state
 """
     ObsConfig
 
-Configuration of an observation model.
+Configuration of an observation model, specifying how observations are generated
+from the underlying environment state.
 
 # Fields
 
 $(FIELDS)
+
+# Constructors
+
 """
-struct ObsConfig{T,U,V}
+struct ObsConfig{T,U,V} <: ModelConfig
     "Initializer with arguments `(env_state, init_args...)`."
     init::T
     "Trailing arguments to initializer."
@@ -34,6 +38,11 @@ Constructs an `ObsConfig` with no observation noise (perfect observability).
 function PerfectObsConfig()
     return ObsConfig(perfect_obs_init, (), perfect_obs_step, ())
 end
+
+@add_constructor_doc(
+    ObsConfig, PerfectObsConfig,
+    "Models perfect observability of the environment state."
+)
 
 """
     perfect_obs_init(env_state)
@@ -61,6 +70,11 @@ function MarkovObsConfig(domain::Domain, obs_params)
     args = (domain, obs_params)
     return ObsConfig(markov_obs_init, args, markov_obs_step, args)
 end
+
+@add_constructor_doc(
+    ObsConfig, MarkovObsConfig,
+    "Models noisy observations that depend only on the current environment state."
+)
 
 """
     markov_obs_init(env_state, domain, obs_params)

@@ -15,7 +15,7 @@ Represents the plan or policy of an agent at a point in time.
 
 $(FIELDS)
 """
-struct PlanState{T}
+struct PlanState{T} <: ModelState
     "Initial timestep of the current plan."
     init_step::Int
     "Solution returned by the planner."
@@ -101,13 +101,16 @@ end
 """
     PlanConfig
 
-Planning configuration for an agent model.
+Planning configuration for an agent model, which specifies how an agent's plan
+or policy is initialized and updated via additional planning over time.
 
 # Fields
 
 $(FIELDS)
+
+# Constructors
 """
-struct PlanConfig{T,U,V}
+struct PlanConfig{T,U,V} <: ModelConfig
     "Initializer with arguments `(belief_state, goal_state, init_args...)`."
     init::T
     "Trailing arguments to initializer."
@@ -151,11 +154,17 @@ end
 """
     StaticPlanConfig(init=PlanState(), init_args=())
 
-Constructs a `PlanConfig` that never updates the initial plan.
+Constructs a `PlanConfig` that never updates the initial plan. The `init` 
+argument can be used to specify a custom plan initializer.
 """
 function StaticPlanConfig(init=default_plan_init, init_args=())
     return PlanConfig(init, init_args, static_plan_step, ())
 end
+
+@add_constructor_doc(
+    PlanConfig, StaticPlanConfig,
+    "Models an agent that never updates its initial plan or policy."
+)
 
 """
     static_plan_step(t, plan_state, belief_state, goal_state, act_state)
@@ -177,13 +186,22 @@ function DetermReplanConfig(domain::Domain, planner::Planner;
                             plan_at_init::Bool = false)
     if plan_at_init
         init = step_plan_init
-        init_args = (determ_replan_step, (domain, planner), ())
+        init_args = (
+            plan_step = determ_replan_step,
+            step_args = (; domain, planner), 
+            init_metadata = ()
+        )
     else
         init = default_plan_init
         init_args = ()
     end
-    return PlanConfig(init, init_args, determ_replan_step, (domain, planner))
+    return PlanConfig(init, init_args, determ_replan_step, (; domain, planner))
 end
+
+@add_constructor_doc(
+    PlanConfig, DetermReplanConfig,
+    "Models an agent that deterministically replans only when necessary."
+)
 
 """
     determ_replan_step(t, plan_state, belief_state, goal_state, domain, planner)
@@ -213,9 +231,9 @@ end
     ReplanConfig(
         domain::Domain, planner::Planner;
         plan_at_init::Bool = false,
-        prob_replan::Real=0.1,
-        prob_refine::Real=0.0,
-        replan_period::Int=1,
+        prob_replan::Real = 0.1,
+        prob_refine::Real = 0.0,
+        replan_period::Int = 1,
         rand_budget::Bool = true,
         budget_var::Symbol = default_budget_var(planner),
         budget_dist::Distribution = shifted_neg_binom,
@@ -223,8 +241,9 @@ end
         budget_dist_update = nothing
     )
 
-Constructs a `PlanConfig` that may stochastically replan at each timestep.
-If `plan_at_init` is true, then the initial plan is computed at timestep zero.
+Constructs a `PlanConfig` that may stochastically replan at each timestep using 
+an ordered forward-search planner. If `plan_at_init` is true, then the initial
+plan is computed at timestep zero.
 
 To perform conjugate prior updates over the (compound) budget distribution,
 specify a `budget_dist_update` function, e.g. `labeled_dircat_update` when 
@@ -243,19 +262,26 @@ function ReplanConfig(
     budget_dist_update = nothing
 )
     @assert 0 <= prob_replan + prob_refine <= 1
-    step_args = (domain, planner, prob_replan, prob_refine, replan_period,
-                 rand_budget, budget_var, budget_dist, budget_dist_args,
-                 budget_dist_update)
-    init_metadata = isnothing(budget_dist_args) ? (;) : (;budget_dist_args)
+    step_args = (; 
+        domain, planner, prob_replan, prob_refine, replan_period,
+        rand_budget, budget_var, budget_dist, budget_dist_args,
+        budget_dist_update
+    )
+    init_metadata = isnothing(budget_dist_args) ? (;) : (; budget_dist_args)
     if plan_at_init
         init = step_plan_init
-        init_args = (replan_step, step_args, init_metadata)
+        init_args = (; plan_step=replan_step, step_args, init_metadata)
     else
         init = default_plan_init
-        init_args = (init_metadata,)
+        init_args = (; init_metadata)
     end
     return PlanConfig(init, init_args, replan_step, step_args)
 end
+
+@add_constructor_doc(
+    PlanConfig, ReplanConfig,
+    "Models stochastic replanning with an ordered forward-search planner."
+)
 
 default_budget_var(::Planner) = :max_time
 default_budget_var(::ForwardPlanner) = :max_nodes
@@ -384,20 +410,25 @@ function ReplanPolicyConfig(
     budget_dist_args::Tuple = (2, 0.05, 1),
     budget_dist_update = nothing
 )
-    step_args = (
+    step_args = (;
         domain, planner, prob_replan, prob_refine, replan_period, replan_cond,
         rand_budget, budget_var, budget_dist, budget_dist_args
     )
     init_metadata = isnothing(budget_dist_update) ? (;) : (;budget_dist_args)
     if plan_at_init
         init = step_plan_init
-        init_args = (replan_policy_step, step_args, init_metadata)
+        init_args = (; plan_step = replan_policy_step, step_args, init_metadata)
     else
         init = default_plan_init
-        init_args = (init_metadata,)
+        init_args = (; init_metadata)
     end
     return PlanConfig(init, init_args, replan_policy_step, step_args)
 end
+
+@add_constructor_doc(
+    PlanConfig, ReplanPolicyConfig,
+    "Models stochastic replanning with a policy-based planner."
+)
 
 default_budget_var(::RealTimeDynamicPlanner) = :max_depth
 default_budget_var(::RealTimeHeuristicSearch) = :max_nodes
@@ -463,6 +494,7 @@ a randomly sampled maximum resource budget.
         return plan_state
     elseif replan == 2 # Replan from the current belief state
         if rand_budget # Sample new resource budget
+            budget = {:budget} ~ budget_dist(budget_dist_args...)
             planner = copy(planner)
             setproperty!(planner, budget_var, budget)
             if !isnothing(budget_dist_update)
@@ -538,7 +570,7 @@ function ReplanMixturePolicyConfig(
     @assert 0.0 <= prob_replan + prob_refine <= 1.0
     @assert length(budget_dist_support) == length(budget_dist_probs)
     @assert sum(budget_dist_probs) ≈ 1.0
-    step_args = (
+    step_args = (;
         domain, planner, prob_replan, prob_refine, replan_period, replan_cond,
         budget_var, budget_dist_support, budget_dist_probs, budget_refinable
     )
@@ -547,17 +579,27 @@ function ReplanMixturePolicyConfig(
         nothing : replan_prior_counts .* [prob_noplan, prob_replan, prob_refine]
     budget_prior_counts = isnothing(budget_dist_prior_counts) ?
         nothing : budget_dist_prior_counts .* budget_dist_probs
-    metadata = (;replan=0, budget_idx=0, prev_weights=budget_dist_probs,
-                replan_prior_counts, budget_prior_counts)
+    init_metadata = (;
+        replan = 0, budget_idx = 0, prev_weights = budget_dist_probs,
+        replan_prior_counts, budget_prior_counts
+    )
     if plan_at_init
         init = step_plan_init
-        init_args = (replan_mixture_policy_step, step_args, metadata)
+        init_args = (;
+            plan_step = replan_mixture_policy_step,
+            step_args, init_metadata
+        )
     else
         init = default_plan_init
-        init_args = (metadata,)
+        init_args = (; init_metadata)
     end
     return PlanConfig(init, init_args, replan_mixture_policy_step, step_args)
 end
+
+@add_constructor_doc(
+    PlanConfig, ReplanMixturePolicyConfig,
+    "Variant of [`ReplanPolicyConfig`](@ref) with marginalization over the search budget."
+)
 
 """
     replan_mixture_policy_step(
@@ -654,8 +696,10 @@ replanning condition.
     # Decide whether to replan or refine
     if replan == 1 # Return original plan with updated mixture weights
         sol = MixturePolicy(plan_state.sol.policies, prev_budget_probs)
-        metadata = (;replan=replan, prev_weights=prev_budget_probs, budget_idx,
-                    replan_prior_counts, budget_prior_counts)
+        metadata = (;
+            replan = replan, prev_weights = prev_budget_probs, budget_idx,
+            replan_prior_counts, budget_prior_counts
+        )
         return PlanState(plan_state.init_step, sol, plan_state.spec, metadata)
     elseif replan == 2 # Replan from the current belief state
         # Draw delayed sample of budget index if not already drawn
@@ -675,8 +719,10 @@ replanning condition.
         )
         # Reset mixture weights to prior budget probabilities
         sol = MixturePolicy(subsols, budget_dist_probs)
-        metadata = (;replan=replan, prev_weights=prev_budget_probs, budget_idx,
-                    replan_prior_counts, budget_prior_counts)
+        metadata = (;
+            replan = replan, prev_weights = prev_budget_probs, budget_idx,
+            replan_prior_counts, budget_prior_counts
+        )
         return PlanState(t, sol, spec, metadata)
     elseif replan == 3 # Refine existing solution
         # Draw delayed sample of budget index if not already drawn
@@ -700,8 +746,10 @@ replanning condition.
         )
         # Reset mixture weights to prior budget probabilities
         sol = MixturePolicy(subsols, budget_dist_probs)
-        metadata = (;replan=replan, prev_weights=prev_budget_probs, budget_idx,
-                    replan_prior_counts, budget_prior_counts)
+        metadata = (;
+            replan = replan, prev_weights = prev_budget_probs, budget_idx,
+            replan_prior_counts, budget_prior_counts
+        )
         return PlanState(plan_state.init_step, sol, spec, metadata)
     end
 end

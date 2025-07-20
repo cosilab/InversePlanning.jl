@@ -5,13 +5,16 @@ export GoalConfig, StaticGoalConfig, ResamplingGoalConfig
 """
     GoalConfig
 
-Goal configuration for an agent model.
+Goal configuration for an agent model, which specifies the prior over the
+agent's initial goal, and how the agent's goal potentially changes over time.
 
 # Fields
 
 $(FIELDS)
+
+# Constructors
 """
-struct GoalConfig{T,U,V}
+struct GoalConfig{T,U,V} <: ModelConfig
     "Initializer with arguments `(belief_state, init_args...)`."
     init::T
     "Trailing arguments to initializer."
@@ -42,9 +45,14 @@ initial belief state as an argument.
 """
 function StaticGoalConfig(goal_prior, state_dependent::Bool=false, init_args=())
     init = state_dependent ? goal_prior : stateless_goal_init
-    init_args = state_dependent ? init_args : (goal_prior, init_args)
+    init_args = state_dependent ? init_args : (; goal_prior, init_args)
     return GoalConfig(init, init_args, static_goal_step, ())
 end
+
+@add_constructor_doc(
+    GoalConfig, StaticGoalConfig,
+    "Models an agent that has a fixed goal, sampled from an initial goal prior."
+)
 
 """
     static_goal_step(t, goal_state, belief_state)
@@ -69,15 +77,19 @@ function ResamplingGoalConfig(
     goal_prior, prob_resample::Real, state_dependent::Bool=false
 )
     init = state_dependent ? goal_prior : stateless_goal_init
-    init_args = state_dependent ? () : (goal_prior,)
-    step_args = (goal_prior, prob_resample, state_dependent)
+    init_args = state_dependent ? () : (; goal_prior,)
+    step_args = (; goal_prior, prob_resample, state_dependent)
     return GoalConfig(init, init_args, resampling_goal_step, step_args)
 end
 
+@add_constructor_doc(
+    GoalConfig, ResamplingGoalConfig,
+    "Models an agent whose goal may be resampled from a prior at each timestep."
+)
 
 """
     resampling_goal_step(t, goal_state, belief_state,
-                         goal_prior, prob_resample)
+                         goal_prior, prob_resample, state_dependent)
 
 Goal transition that resamples a goal from the (state-dependent) prior with 
 some probability `prob_resample` at each timestep.
