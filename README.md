@@ -14,7 +14,7 @@ enter the package manager, then run:
 add PDDL SymbolicPlanners
 add Gen GenParticleFilters
 add PDDLViz GLMakie
-add https://github.com/probcomp/InversePlanning.jl.git
+add https://github.com/cosilab/InversePlanning.jl.git
 ```
 
 To explore the examples provided in this repository, clone this repository,
